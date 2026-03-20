@@ -111,6 +111,9 @@ model User {
   walletTxs              WalletTransaction[] @relation("WalletTxActor")
   supportActions         SupportAction[]     @relation("SupportActor")
   orderEvents            OrderEvent[]        @relation("OrderEventActor")
+
+  actedWalletTransactions WalletTransaction[] @relation("WalletTxActor")
+  targetedSupportActions  SupportAction[]     @relation("SupportTarget")
 }
 
 model CourierProfile {
