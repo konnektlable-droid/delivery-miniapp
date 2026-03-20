@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  FROZEN
+  BLOCKED
+}
+
+enum TrustLevel {
+  NONE
+  BASIC
+  TRUSTED
+  PREMIUM
+}
+
+enum TransportType {
+  WALK
+  BIKE
+}
+
+enum ReplacementsMode {
+  NO_REPLACEMENTS
+  SIMILAR_ONLY
+  ANY_REASONABLE
+}
+
+enum OrderStatus {
+  SEARCHING_COURIER
+  CLAIMED
+  AT_STORE
+  COLLECTING
+  AWAITING_PAYMENT
+  NEEDS_APPROVAL
+  PAID
+  RECEIPT_UPLOADED
+  DELIVERING
+  DELIVERED
+  CANCELLED
+  PROBLEM
+}
+
+enum WalletTxType {
+  TOPUP_CONFIRMED
+  TOPUP_REJECTED
+  ORDER_RESERVE
+  ORDER_RELEASE
+  ORDER_FINAL_CHARGE
+  REFUND
+  MANUAL_ADJUSTMENT
+  COURIER_PAYOUT_ACCRUAL
+}
+
+enum WalletTxDirection {
+  CREDIT
+  DEBIT
+}
+
+enum TopupRequestStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum AttachmentType {
+  PAYMENT_QR
+  RECEIPT
+}
+
+enum StorageKind {
+  LOCAL
+  TELEGRAM
+}
+
+model User {
+  id               String      @id @default(uuid())
+  telegramId       String      @unique
+  telegramUsername String?
+  firstName        String?
+  lastName         String?
+  phone            String?
+  status           UserStatus  @default(ACTIVE)
+  isSupport        Boolean     @default(false)
+  isAdmin          Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  lastSeenAt       DateTime?
+
+  wallet           Wallet?
+  courierProfile   CourierProfile?
+
+  clientOrders     Order[]     @relation("ClientOrders")
+  courierOrders    Order[]     @relation("CourierOrders")
+
+  topupRequests    TopupRequest[]
+  attachments      Attachment[]
+
+  supportActionsAsActor SupportAction[] @relation("SupportActor")
+  supportActionsTarget  SupportAction[] @relation("SupportTarget")
+
+  @@index([status])
+}
+
+model CourierProfile {
+  id                 String        @id @default(uuid())
+  userId             String        @unique
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  birthDate          DateTime
+  requestedTransport TransportType
+  effectiveTransport TransportType @default(WALK)
+  profileVerified    Boolean       @default(false)
+  bikeVerified       Boolean       @default(false)
+  trustLevel         TrustLevel    @default(NONE)
+  trustNote          String?
+  completedOrders    Int           @default(0)
+  incidentsCount     Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([trustLevel])
+  @@index([effectiveTransport])
+}
+
+model Wallet {
+  id              String              @id @default(uuid())
+  userId          String              @unique
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance         Int                 @default(0)
+  reservedBalance Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  transactions    WalletTransaction[]
+}
+
+model WalletTransaction {
+  id             String             @id @default(uuid())
+  walletId       String
+  wallet         Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type           WalletTxType
+  direction      WalletTxDirection
+  amount         Int
+  comment        String?
+  orderId        String?
+  order          Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  topupRequestId String?
+  topupRequest   TopupRequest?      @relation(fields: [topupRequestId], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
+
+  @@index([walletId, createdAt])
+}
+
+model TopupRequest {
+  id            String             @id @default(uuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Int
+  payerPhone    String?
+  comment       String?
+  status        TopupRequestStatus @default(PENDING)
+  processedById String?
+  processedBy   User?              @relation("TopupProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  processedAt   DateTime?
+  transactions  WalletTransaction[]
+
+  @@index([status, createdAt])
+}
+
+model Order {
+  id                String           @id @default(uuid())
+  orderNumber       String           @unique
+  clientUserId      String
+  clientUser        User             @relation("ClientOrders", fields: [clientUserId], references: [id], onDelete: Restrict)
+  courierUserId     String?
+  courierUser       User?            @relation("CourierOrders", fields: [courierUserId], references: [id], onDelete: SetNull)
+  status            OrderStatus      @default(SEARCHING_COURIER)
+
+  storeName         String
+  storeAddress      String
+  deliveryAddress   String
+  deliveryComment   String?
+  replacementsMode  ReplacementsMode
+  allowPartial      Boolean          @default(true)
+  isNight           Boolean          @default(false)
+
+  estimatedGoodsTotal Int
+  deliveryFee       Int
+  reserveBuffer     Int
+  reservedTotal     Int
+  actualGoodsTotal  Int?
+  finalTotal        Int?
+  courierPayout     Int?
+  platformMargin    Int?
+  receiptTotal      Int?
+
+  paymentQrUploadedAt DateTime?
+  paymentConfirmedAt  DateTime?
+  receiptUploadedAt   DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+
+  manualAssigned      Boolean         @default(false)
+  manualAssignmentReason String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  items             OrderItem[]
+  attachments       Attachment[]
+  events            OrderEvent[]
+  supportActions    SupportAction[]
+  walletTxs         WalletTransaction[]
+
+  @@index([status, createdAt])
+  @@index([clientUserId])
+  @@index([courierUserId])
+}
+
+model OrderItem {
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name              String
+  qty               Int
+  unitEstimatedPrice Int
+  lineEstimatedTotal Int
+  actualQty         Int?
+  actualUnitPrice   Int?
+  actualLineTotal   Int?
+  itemStatus        String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+model Attachment {
+  id               String         @id @default(uuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type             AttachmentType
+  storageKind      StorageKind
+  storageRef       String
+  mimeType         String?
+  fileSize         Int?
+  uploadedByUserId String
+  uploadedByUser   User           @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  expiresAt        DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@index([orderId, type])
+}
+
+model OrderEvent {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type        String
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus?
+  actorUserId String?
+  actorUser   User?       @relation("OrderEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  payload     Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model SupportAction {
+  id           String   @id @default(uuid())
+  actorUserId  String
+  actorUser    User     @relation("SupportActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  targetUserId String?
+  targetUser   User?    @relation("SupportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  orderId      String?
+  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  type         String
+  comment      String?
+  beforeData   Json?
+  afterData    Json?
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([orderId])
+}
+
+model AppSetting {
+  key             String   @id
+  value           Json
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+}
