@@ -153,6 +153,10 @@ model WalletTransaction {
   type           WalletTxType
   direction      WalletTxDirection
   amount         Int
+
+  actorUserId    String?
+  actorUser      User?              @relation("WalletTxActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
   comment        String?
   orderId        String?
   order          Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
