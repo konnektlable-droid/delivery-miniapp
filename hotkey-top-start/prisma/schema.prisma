@@ -80,32 +80,37 @@ enum StorageKind {
 }
 
 model User {
-  id               String      @id @default(uuid())
-  telegramId       String      @unique
-  telegramUsername String?
-  firstName        String?
-  lastName         String?
-  phone            String?
-  status           UserStatus  @default(ACTIVE)
-  isSupport        Boolean     @default(false)
-  isAdmin          Boolean     @default(false)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  lastSeenAt       DateTime?
+  id                     String   @id @default(uuid())
+  telegramId             String   @unique
+  telegramUsername       String?
+  firstName              String?
+  lastName               String?
+  phone                  String?
+  status                 UserStatus @default(ACTIVE)
 
-  wallet           Wallet?
-  courierProfile   CourierProfile?
+  isSupport              Boolean  @default(false)
+  isAdmin                Boolean  @default(false)
 
-  clientOrders     Order[]     @relation("ClientOrders")
-  courierOrders    Order[]     @relation("CourierOrders")
+  frozenUntil            DateTime?
+  freezeReason           String?
+  blockReason            String?
 
-  topupRequests    TopupRequest[]
-  attachments      Attachment[]
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  lastSeenAt             DateTime?
 
-  supportActionsAsActor SupportAction[] @relation("SupportActor")
-  supportActionsTarget  SupportAction[] @relation("SupportTarget")
+  wallet                 Wallet?
+  courierProfile         CourierProfile?
 
-  @@index([status])
+  clientOrders           Order[]  @relation("ClientOrders")
+  courierOrders          Order[]  @relation("CourierOrders")
+
+  topupRequests          TopupRequest[]
+  processedTopupRequests TopupRequest[]      @relation("TopupProcessedBy")
+  attachments            Attachment[]
+  walletTxs              WalletTransaction[] @relation("WalletTxActor")
+  supportActions         SupportAction[]     @relation("SupportActor")
+  orderEvents            OrderEvent[]        @relation("OrderEventActor")
 }
 
 model CourierProfile {
